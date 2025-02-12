@@ -83,8 +83,9 @@ class Business:
 st.title("AKIYA Revolution!")
 
 # ユーザー入力
-area_type = st.selectbox("事業を行うエリアを選択", ["鎌倉(由比ヶ浜)", "葉山(堀内)"])
+area_type = st.selectbox("事業を行うエリアを選択", ["kamakura", "hayama"])
 area_type = "kamakura" if "kamakura" in area_type else "hayama"
+#st.write(f"選択されたエリア: {area_type}")
 
 if area_type == "kamakura":
     market_factors = MarketFactors(
