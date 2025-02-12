@@ -83,7 +83,7 @@ class Business:
 st.title("AKIYA Revolution!")
 
 # ユーザー入力
-area_type = st.selectbox("エリアタイプを選択", ["鎌倉(由比ヶ浜)", "葉山(堀内)"])
+area_type = st.selectbox("事業を行うエリアを選択", ["鎌倉(由比ヶ浜)", "葉山(堀内)"])
 area_type = "kamakura" if "kamakura" in area_type else "hayama"
 
 if area_type == "kamakura":
@@ -113,14 +113,31 @@ businesses = {
 }
 
 # 分析実行ボタン
-if st.button("市場分析を実行"):
+# 分析実行ボタン
+if st.button("事業を推薦"):
     results = []
     for name, business in businesses.items():
         market_score = MarketPotentialCalculator.calculate(market_factors, name)
         results.append(business.summary_dict(market_score))
 
-    # 結果表示
+    # 収益率の最大値と回収期間の最小値を見つける
+    best_profit = max(results, key=lambda r: float(r['収益率'].replace('%', '')))
+    best_payback = min(results, key=lambda r: float(r['回収期間'].replace('年', '')))
+
+    # ハイライト用のタイトル
+    st.markdown("### 🏆 **おすすめの事業**")
+
+    # 収益率最大と回収期間最小が同じなら1つだけ表示
+    if best_profit == best_payback:
+        st.success(f"🌟 **{best_profit['name']}** が最もおすすめです！")
+    else:
+        st.success(f"💰 **収益率が最も高い:** {best_profit['name']}（{best_profit['収益率']}）")
+        st.warning(f"⏳ **回収期間が最も短い:** {best_payback['name']}（{best_payback['回収期間']}）")
+
+    # 通常の結果表示
+    st.markdown("### 📊 **全事業の分析結果**")
     for r in results:
+        #highlight = "🟢" if r == best_profit or r == best_payback else ""
         st.subheader(f"{r['name']} の結果")
         st.write(f"・市場スコア : {r['市場スコア']}")
         st.write(f"・初期投資額 : {r['初期投資額']}")
