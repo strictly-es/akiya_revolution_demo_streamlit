@@ -11,24 +11,24 @@ class MarketPotentialCalculator:
     """ 市場ポテンシャル(Potential_score)を計算 """
     FACTOR_RANGES = {
         "kamakura": {
-            "population": 10000, "distance_from_station": 20,
-            "tourist": 10000, "household_income": 10000000
+            "population": 1000000, "distance_from_station": 20,
+            "tourist": 100000, "household_income": 10000000
         },
         "hayama": {
-            "population": 5000, "distance_from_station": 40,
-            "tourist": 300, "household_income": 8000000
+            "population": 500000, "distance_from_station": 40,
+            "tourist": 3000, "household_income": 8000000
         }
     }
 
     WEIGHTS = {
         "kamakura": {
-            "cafe": {"population": 0.3, "distance_from_station": 0.3, "tourist": 0.2, "household_income": 0.2},
+            "cafe": {"population": 0.4, "distance_from_station": 0.2, "tourist": 0.2, "household_income": 0.2},
             "accommodation": {"population": 0.2, "distance_from_station": 0.2, "tourist": 0.3, "household_income": 0.3},
             "shareAtelier": {"population": 0.25, "distance_from_station": 0.25, "tourist": 0.25, "household_income": 0.25}
         },
         "hayama": {
-            "cafe": {"population": 0.25, "distance_from_station": 0.25, "tourist": 0.25, "household_income": 0.25},
-            "accommodation": {"population": 0.25, "distance_from_station": 0.25, "tourist": 0.25, "household_income": 0.25},
+            "cafe": {"population": 0.2, "distance_from_station": 0.2, "tourist": 0.3, "household_income": 0.3},
+            "accommodation": {"population": 0.4, "distance_from_station": 0.1, "tourist": 0.4, "household_income": 0.1},
             "shareAtelier": {"population": 0.25, "distance_from_station": 0.25, "tourist": 0.25, "household_income": 0.25}
         }
     }
@@ -90,30 +90,144 @@ area_type = "kamakura" if "kamakura" in area_type else "hayama"
 if area_type == "kamakura":
     market_factors = MarketFactors(
         area_type="kamakura",
-        factors={"population": 8000, "distance_from_station": 10, "tourist": 5000, "household_income": 7000000},
+        factors={
+            "population": 800000, 
+            "distance_from_station": 10, 
+            "tourist": 90000, 
+            "household_income": 7_000_000
+        },
         epsilon=0.5
     )
-else:
+
+    businesses = {
+        "cafe": Business(
+            name="カフェ",
+            initial_investment=25_000_000, 
+            users=2_500,
+            unit_price=1_300, 
+            other_revenue=50_000,
+            costs={
+                "人件費": 1_500_000,
+                "水道光熱費": 50_000,
+                "通信費": 6_000,
+                "清掃費": 70_000,
+                "消耗品費": 150_000,
+                "保険料": 5_000,
+                "修繕費": 0, 
+                "地代家賃": 150_000,
+                "その他経費": 821_500
+            }
+        ),
+        "accommodation": Business(
+            name="宿泊施設",
+            initial_investment=65_000_000,
+            users=150,
+            unit_price=25_000,
+            other_revenue=500_000,
+            costs={
+                "人件費": 3_000_000,
+                "水道光熱費": 50_000,
+                "通信費": 6_000,
+                "清掃費": 500_000,
+                "消耗品費": 700_000,
+                "保険料": 2_000,
+                "修繕費": 0,
+                "地代家賃": 200_000,
+                "その他経費": 192_000
+            },
+        ),
+        "shareAtelier": Business(
+            name="シェアアトリエ",
+            initial_investment=40_000_000,
+            users=30,
+            unit_price=65_000,
+            other_revenue=500_000,
+            costs={
+                "人件費": 2_000_000,
+                "水道光熱費": 30_000,
+                "通信費": 6_000,
+                "清掃費": 100_000,
+                "消耗品費": 50_000,
+                "保険料": 2_000,
+                "修繕費": 0,
+                "地代家賃": 100_000,
+                "その他経費": 100_000
+            }
+        )
+    }
+
+else:  # hayama
     market_factors = MarketFactors(
         area_type="hayama",
-        factors={"population": 3000, "distance_from_station": 25, "tourist": 100, "household_income": 5000000},
+        factors={
+            "population": 600000,
+            "distance_from_station": 25,
+            "tourist": 50000,
+            "household_income": 6_000_000
+        },
         epsilon=0.5
     )
 
-# 事業データ
-businesses = {
-    "cafe": Business("カフェ", 30000000, 2500, 1100, 50000, 
-                     {"人件費": 1147500, "水道光熱費": 50000, "通信費": 6000, "清掃費": 70000,
-                      "消耗品費": 150000, "保険料": 5000, "地代家賃": 150000, "その他経費": 821500}),
-    "accommodation": Business("宿泊施設", 50000000, 200, 12000, 50000, 
-                              {"人件費": 250000, "水道光熱費": 30000, "通信費": 6000, "清掃費": 70000,
-                               "消耗品費": 70000, "保険料": 2000, "地代家賃": 200000, "その他経費": 192000}),
-    "shareAtelier": Business("シェアアトリエ", 10000000, 50, 20000, 0, 
-                             {"人件費": 300000, "水道光熱費": 30000, "通信費": 6000, "清掃費": 70000,
-                              "消耗品費": 50000, "保険料": 2000, "地代家賃": 100000, "その他経費": 100000})
-}
+    # 宿泊施設を最強: 初期投資下げ & 利用人数↑ & 単価↑
+    businesses = {
+        "cafe": Business(
+            name="カフェ",
+            initial_investment=30_000_000,
+            users=2_500,
+            unit_price=1_100,
+            other_revenue=50_000,
+            costs={
+                "人件費": 1_500_000,
+                "水道光熱費": 50_000,
+                "通信費": 6_000,
+                "清掃費": 70_000,
+                "消耗品費": 150_000,
+                "保険料": 5_000,
+                "修繕費": 0, 
+                "地代家賃": 150_000,
+                "その他経費": 821_500
+            }
+        ),
+        "accommodation": Business(
+            name="宿泊施設",
+            initial_investment=60_000_000, 
+            users=150,                      
+            unit_price=30_000,          
+            other_revenue=500_000,
+            costs={
+                "人件費": 3_000_000,
+                "水道光熱費": 50_000,
+                "通信費": 6_000,
+                "清掃費": 500_000,
+                "消耗品費": 700_000,
+                "保険料": 2_000,
+                "修繕費": 0,
+                "地代家賃": 200_000,
+                "その他経費": 192_000
+            },
+        ),
+        "shareAtelier": Business(
+            name="シェアアトリエ",
+            initial_investment=40_000_000,
+            users=30,
+            unit_price=65_000,
+            other_revenue=500_000,
+            costs={
+                "人件費": 2_000_000,
+                "水道光熱費": 30_000,
+                "通信費": 6_000,
+                "清掃費": 100_000,
+                "消耗品費": 50_000,
+                "保険料": 2_000,
+                "修繕費": 0,
+                "地代家賃": 100_000,
+                "その他経費": 100_000
+            }
+        )
+    }
 
-# 分析実行ボタン
+
+
 # 分析実行ボタン
 if st.button("事業を推薦"):
     results = []
