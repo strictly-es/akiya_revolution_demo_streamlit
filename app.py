@@ -82,8 +82,17 @@ class Business:
 
 st.title("AKIYA Revolution!")
 
-# ユーザー入力
-area_type = st.selectbox("事業を行うエリアを選択", ["kamakura", "hayama"])
+# ラベル（表示名）と対応する値の辞書
+area_options = {
+    "鎌倉市由比ヶ浜 / 小売店": "kamakura",
+    "葉山町堀内 / 戸建住宅": "hayama"
+}
+
+# ユーザーに表示する選択肢（キーのリスト）
+selected_label = st.selectbox("住所 / 従前の利用用途", list(area_options.keys()))
+
+# 選択された値を取得（辞書から対応する value を取得）
+area_type = area_options[selected_label]
 area_type = "kamakura" if "kamakura" in area_type else "hayama"
 #st.write(f"選択されたエリア: {area_type}")
 
