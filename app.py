@@ -1,5 +1,110 @@
 import streamlit as st
+import requests
+import json
+import math
+import geopandas as gpd
+import pandas as pd
+from shapely.geometry import Point, Polygon
 
+# ------------------------------
+# ① 住所から座標取得
+# ------------------------------
+def get_coordinates_from_address(area: str, addr: str):
+    url = f'https://jageocoder.info-proto.com/geocode?addr={addr}&area={area}&opts=all'
+    try:
+        response = requests.get(url)
+        response.raise_for_status()
+        data = response.json()
+        if data and "node" in data[0]:
+            lng = data[0]["node"]["x"]
+            lat = data[0]["node"]["y"]
+            return {"lng": lng, "lat": lat, "lng_4": round(lng, 4), "lat_4": round(lat, 4)}
+    except requests.exceptions.RequestException:
+        return None
+
+# ------------------------------
+# ② 緯度・経度 → タイル座標変換
+# ------------------------------
+def latlng_to_xyz(lat, lng, zoom):
+    x = math.floor((lng + 180) / 360 * 2**zoom)
+    y = math.floor((1 - math.log(math.tan(math.radians(lat)) + 1 / math.cos(math.radians(lat))) / math.pi) / 2 * 2**zoom)
+    return x, y
+
+# ------------------------------
+# ③ タイル座標から用途区分を取得
+# ------------------------------
+def is_point_in_polygon(point, polygon):
+    return Polygon(polygon).contains(Point(point))
+
+def get_use_area_ja(x, y, z, lng_4, lat_4, api_key):
+    url = f'https://www.reinfolib.mlit.go.jp/ex-api/external/XKT002?response_format=geojson&z={z}&x={x}&y={y}&from=20223&to=20234'
+    headers = {'Ocp-Apim-Subscription-Key': api_key}
+    try:
+        response = requests.get(url, headers=headers)
+        response.raise_for_status()
+        data = response.json()
+        for feature in data.get("features", []):
+            geometry = feature.get("geometry", {})
+            properties = feature.get("properties", {})
+            if geometry.get("type") == "Polygon":
+                for coordinates in geometry.get("coordinates", []):
+                    if is_point_in_polygon((lng_4, lat_4), coordinates):
+                        return properties.get("use_area_ja")
+    except requests.exceptions.RequestException:
+        return None
+
+# ------------------------------
+# ④ 用途地域 → 許可される事業を決定
+# ------------------------------
+def check_building_permissions(youto_chiiki, area_size):
+    permissions = {
+        "第１種低層住居専用地域": {"cafe": 150, "shareAtelier": 150, "accommodation": 0},
+        "第２種低層住居専用地域": {"cafe": 150, "shareAtelier": 0, "accommodation": 0},
+        "第１種中高層住居専用地域": {"cafe": 500, "shareAtelier": 150, "accommodation": 0},
+        "第２種中高層住居専用地域": {"cafe": 1500, "shareAtelier": 150, "accommodation": 0},
+        "第１種住居地域": {"cafe": 3000, "shareAtelier": 3000, "accommodation": 3000},
+        "第２種住居地域": {"cafe": 10000, "shareAtelier": 3000, "accommodation": 10000},
+        "準住居地域": {"cafe": 10000, "shareAtelier": 3000, "accommodation": 0},
+        "近隣商業地域": {"cafe": float('inf'), "shareAtelier": float('inf'), "accommodation": float('inf')},
+        "商業地域": {"cafe": float('inf'), "shareAtelier": float('inf'), "accommodation": float('inf')},
+        "準工業地域": {"cafe": float('inf'), "shareAtelier": float('inf'), "accommodation": float('inf')},
+        "工業地域": {"cafe": float('inf'), "shareAtelier": float('inf'), "accommodation": 0},
+        "工業専用地域": {"cafe": 0, "shareAtelier": float('inf'), "accommodation": 0}
+    }
+    return [biz for biz, max_size in permissions.get(youto_chiiki, {}).items() if area_size <= max_size]
+
+# ------------------------------
+# ⑤ 人口データ取得
+# ------------------------------
+def get_PT0_values(x, y, z, lng_4, lat_4, api_key):
+    url = f'https://www.reinfolib.mlit.go.jp/ex-api/external/XKT013?response_format=geojson&z={z}&x={x}&y={y}&from=20223&to=20234'
+    headers = {'Ocp-Apim-Subscription-Key': api_key}
+    try:
+        response = requests.get(url, headers=headers)
+        response.raise_for_status()
+        data = response.json()
+        for feature in data.get("features", []):
+            geometry = feature.get("geometry", {})
+            properties = feature.get("properties", {})
+            if geometry.get("type") == "Polygon":
+                for coordinates in geometry.get("coordinates", []):
+                    if is_point_in_polygon((lng_4, lat_4), coordinates):
+                        return properties.get("PT0_2020")
+    except requests.exceptions.RequestException:
+        return None
+
+# ------------------------------
+# ⑥ 最寄り駅の距離を計算
+# ------------------------------
+def get_nearest_station_distance(longitude, latitude, path='station_zenkoku.gpkg'):
+    gdf = gpd.read_file(path).to_crs(epsg=3857)
+    target_point = gpd.GeoDataFrame([{'geometry': Point(longitude, latitude)}], crs="EPSG:4326").to_crs(epsg=3857).geometry.iloc[0]
+    gdf['distance'] = gdf.geometry.distance(target_point)
+    return gdf['distance'].min()
+
+# ------------------------------
+# ⑦ 事業推薦・市場分析クラス
+# ------------------------------
 class MarketFactors:
     """ 市場環境のデータを保持 """
     def __init__(self, area_type: str, factors: dict, epsilon: float = 0.0):
@@ -10,26 +115,26 @@ class MarketFactors:
 class MarketPotentialCalculator:
     """ 市場ポテンシャル(Potential_score)を計算 """
     FACTOR_RANGES = {
-        "kamakura": {
-            "population": 1000000, "distance_from_station": 20,
-            "tourist": 100000, "household_income": 10000000
-        },
-        "hayama": {
-            "population": 500000, "distance_from_station": 40,
-            "tourist": 3000, "household_income": 8000000
-        }
+        "kamakura": {"population": 5000, "distance_from_station": 3200},
+        "hayama": {"population": 2500, "distance_from_station": 3200},
+        "zushi": {"population": 3000, "distance_from_station": 3200}
     }
 
     WEIGHTS = {
         "kamakura": {
-            "cafe": {"population": 0.4, "distance_from_station": 0.2, "tourist": 0.2, "household_income": 0.2},
-            "accommodation": {"population": 0.2, "distance_from_station": 0.2, "tourist": 0.3, "household_income": 0.3},
-            "shareAtelier": {"population": 0.25, "distance_from_station": 0.25, "tourist": 0.25, "household_income": 0.25}
+            "cafe": {"population": 0.4, "distance_from_station": 0.2},
+            "accommodation": {"population": 0.2, "distance_from_station": 0.2},
+            "shareAtelier": {"population": 0.25, "distance_from_station": 0.25}
         },
         "hayama": {
-            "cafe": {"population": 0.2, "distance_from_station": 0.2, "tourist": 0.3, "household_income": 0.3},
-            "accommodation": {"population": 0.4, "distance_from_station": 0.1, "tourist": 0.4, "household_income": 0.1},
-            "shareAtelier": {"population": 0.25, "distance_from_station": 0.25, "tourist": 0.25, "household_income": 0.25}
+            "cafe": {"population": 0.2, "distance_from_station": 0.2},
+            "accommodation": {"population": 0.4, "distance_from_station": 0.1},
+            "shareAtelier": {"population": 0.25, "distance_from_station": 0.25}
+        },
+        "zushi": {
+            "cafe": {"population": 0.2, "distance_from_station": 0.2},
+            "accommodation": {"population": 0.4, "distance_from_station": 0.1},
+            "shareAtelier": {"population": 0.25, "distance_from_station": 0.25}
         }
     }
 
@@ -41,7 +146,7 @@ class MarketPotentialCalculator:
         return min(1.0, value / max_val)
 
     @classmethod
-    def calculate(cls, factors: MarketFactors, business_type: str):
+    def calculate(cls, factors, business_type):
         weights = cls.WEIGHTS[factors.area_type].get(business_type, {})
         weighted_sum = sum(weights.get(f, 0) * cls._normalize_factor(factors.area_type, f, v) for f, v in factors.factors.items())
         return weighted_sum + factors.epsilon
@@ -80,171 +185,127 @@ class Business:
             "回収期間": f"{payback_period:.2f}年"
         }
 
+# ------------------------------
+# Streamlit UI
+# ------------------------------
 st.title("AKIYA Revolution!")
 
-# ラベル（表示名）と対応する値の辞書
-area_options = {
-    "鎌倉市由比ヶ浜 / 小売店": "kamakura",
-    "葉山町堀内 / 戸建住宅": "hayama"
-}
+# ユーザー入力
+area = st.text_input("都道府県を入力", "神奈川県")
+addr = st.text_input("住所を入力", "鎌倉市由比ケ浜1-12-8")
+initial_investment = st.number_input("初期投資額 (円)", min_value=1_000_000, max_value=100_000_000, value=25_000_000, step=500_000)
+area_size = st.number_input("建物面積 (㎡)", min_value=50, max_value=10_000, value=2000, step=50)
 
-# ユーザーに表示する選択肢（キーのリスト）
-selected_label = st.selectbox("住所 / 従前の利用用途", list(area_options.keys()))
+# st.write(f"initial_investment: {initial_investment}")
 
-# 選択された値を取得（辞書から対応する value を取得）
-area_type = area_options[selected_label]
-area_type = "kamakura" if "kamakura" in area_type else "hayama"
-#st.write(f"選択されたエリア: {area_type}")
-
-if area_type == "kamakura":
-    market_factors = MarketFactors(
-        area_type="kamakura",
-        factors={
-            "population": 800000, 
-            "distance_from_station": 10, 
-            "tourist": 90000, 
-            "household_income": 7_000_000
-        },
-        epsilon=0.5
-    )
-
-    businesses = {
-        "cafe": Business(
-            name="カフェ",
-            initial_investment=25_000_000, 
-            users=2_500,
-            unit_price=1_300, 
-            other_revenue=50_000,
-            costs={
-                "人件費": 1_500_000,
-                "水道光熱費": 50_000,
-                "通信費": 6_000,
-                "清掃費": 70_000,
-                "消耗品費": 150_000,
-                "保険料": 5_000,
-                "修繕費": 0, 
-                "地代家賃": 150_000,
-                "その他経費": 821_500
-            }
-        ),
-        "accommodation": Business(
-            name="宿泊施設",
-            initial_investment=65_000_000,
-            users=150,
-            unit_price=25_000,
-            other_revenue=500_000,
-            costs={
-                "人件費": 3_000_000,
-                "水道光熱費": 50_000,
-                "通信費": 6_000,
-                "清掃費": 500_000,
-                "消耗品費": 700_000,
-                "保険料": 2_000,
-                "修繕費": 0,
-                "地代家賃": 200_000,
-                "その他経費": 192_000
-            },
-        ),
-        "shareAtelier": Business(
-            name="シェアアトリエ",
-            initial_investment=40_000_000,
-            users=30,
-            unit_price=65_000,
-            other_revenue=500_000,
-            costs={
-                "人件費": 2_000_000,
-                "水道光熱費": 30_000,
-                "通信費": 6_000,
-                "清掃費": 100_000,
-                "消耗品費": 50_000,
-                "保険料": 2_000,
-                "修繕費": 0,
-                "地代家賃": 100_000,
-                "その他経費": 100_000
-            }
-        )
-    }
-
-else:  # hayama
-    market_factors = MarketFactors(
-        area_type="hayama",
-        factors={
-            "population": 600000,
-            "distance_from_station": 25,
-            "tourist": 50000,
-            "household_income": 6_000_000
-        },
-        epsilon=0.5
-    )
-
-    # 宿泊施設を最強: 初期投資下げ & 利用人数↑ & 単価↑
-    businesses = {
-        "cafe": Business(
-            name="カフェ",
-            initial_investment=30_000_000,
-            users=2_500,
-            unit_price=1_100,
-            other_revenue=50_000,
-            costs={
-                "人件費": 1_500_000,
-                "水道光熱費": 50_000,
-                "通信費": 6_000,
-                "清掃費": 70_000,
-                "消耗品費": 150_000,
-                "保険料": 5_000,
-                "修繕費": 0, 
-                "地代家賃": 150_000,
-                "その他経費": 821_500
-            }
-        ),
-        "accommodation": Business(
-            name="宿泊施設",
-            initial_investment=60_000_000, 
-            users=150,                      
-            unit_price=30_000,          
-            other_revenue=500_000,
-            costs={
-                "人件費": 3_000_000,
-                "水道光熱費": 50_000,
-                "通信費": 6_000,
-                "清掃費": 500_000,
-                "消耗品費": 700_000,
-                "保険料": 2_000,
-                "修繕費": 0,
-                "地代家賃": 200_000,
-                "その他経費": 192_000
-            },
-        ),
-        "shareAtelier": Business(
-            name="シェアアトリエ",
-            initial_investment=40_000_000,
-            users=30,
-            unit_price=65_000,
-            other_revenue=500_000,
-            costs={
-                "人件費": 2_000_000,
-                "水道光熱費": 30_000,
-                "通信費": 6_000,
-                "清掃費": 100_000,
-                "消耗品費": 50_000,
-                "保険料": 2_000,
-                "修繕費": 0,
-                "地代家賃": 100_000,
-                "その他経費": 100_000
-            }
-        )
-    }
-
-
-
-# 分析実行ボタン
 if st.button("事業を推薦"):
-    results = []
-    for name, business in businesses.items():
-        market_score = MarketPotentialCalculator.calculate(market_factors, name)
-        results.append(business.summary_dict(market_score))
+    # 1️⃣ 住所から座標を取得
+    coordinates = get_coordinates_from_address(area, addr)
+    if not coordinates:
+        st.error("住所の緯度経度が取得できませんでした。")
+        st.stop()
 
-    # 収益率の最大値と回収期間の最小値を見つける
+    lng, lat, lng_4, lat_4 = coordinates.values()
+
+    # 2️⃣ タイル座標変換
+    zoom = 15
+    x, y = latlng_to_xyz(lat, lng, zoom)
+
+    # 3️⃣ 用途地域取得
+    api_key = '43f3468632cc42849065bd7e48eabe87'
+    use_area_ja = get_use_area_ja(x, y, zoom, lng_4, lat_4, api_key)
+    st.write(f"用途地域 (use_area_ja): {use_area_ja}")
+
+    # 4️⃣ 許可される事業の判定
+    #area_size = 2000
+    allowed_buildings = check_building_permissions(use_area_ja, area_size)
+    st.write(f"許可される事業 (allowed_buildings): {allowed_buildings}")
+
+    # 5️⃣ 人口データ取得
+    population = get_PT0_values(x, y, zoom, lng_4, lat_4, api_key)
+
+    # 6️⃣ 最寄り駅の距離取得
+    distance = get_nearest_station_distance(lng_4, lat_4)
+
+    # 7️⃣ 事業推薦
+    area_type = "kamakura" if "鎌倉" in addr else "hayama"
+    market_factors = MarketFactors(
+        area_type=area_type,
+        factors={
+            "population": population,
+            "distance_from_station": distance
+        },
+        epsilon=0.5
+    )
+
+    #入力値
+    #initial_investment=25_000_000
+    other_revenue=100_000
+
+    businesses = {
+    "cafe": Business(
+        name="カフェ",
+        initial_investment=initial_investment,
+        users=2000,
+        unit_price=1500,
+        other_revenue=other_revenue,
+        costs={
+            "人件費": 1_000_000,
+            "水道光熱費": 50_000,
+            "通信費": 6_000,
+            "清掃費": 70_000,
+            "消耗品費": 100_000,
+            "保険料": 5_000,
+            "修繕費": 0,
+            "地代家賃": 150_000,
+            "その他経費": 821_500
+        }
+    ),
+    "accommodation": Business(
+        name="宿泊施設",
+        initial_investment=initial_investment,
+        users=60,
+        unit_price=75000,
+        other_revenue=other_revenue,
+        costs={
+            "人件費": 2_000_000,
+            "水道光熱費": 50_000,
+            "通信費": 6_000,
+            "清掃費": 100_000,
+            "消耗品費": 700_000,
+            "保険料": 2_000,
+            "修繕費": 0,
+            "地代家賃": 200_000,
+            "その他経費": 192_000
+        },
+    ),
+    "shareAtelier": Business(
+        name="シェアアトリエ",
+        initial_investment=initial_investment,
+        users=30,
+        unit_price=75000,
+        other_revenue=other_revenue,
+        costs={
+            "人件費": 1_000_000,
+            "水道光熱費": 30_000,
+            "通信費": 6_000,
+            "清掃費": 100_000,
+            "消耗品費": 50_000,
+            "保険料": 2_000,
+            "修繕費": 0,
+            "地代家賃": 100_000,
+            "その他経費": 100_000
+        }
+    )
+    }
+
+
+    results = []
+    for name in allowed_buildings:
+        market_score = MarketPotentialCalculator.calculate(market_factors, name)
+        results.append(businesses[name].summary_dict(market_score))
+
+        # 収益率の最大値と回収期間の最小値を見つける
     best_profit = max(results, key=lambda r: float(r['収益率'].replace('%', '')))
     best_payback = min(results, key=lambda r: float(r['回収期間'].replace('年', '')))
 
@@ -258,10 +319,10 @@ if st.button("事業を推薦"):
         st.success(f"💰 **収益率が最も高い:** {best_profit['name']}（{best_profit['収益率']}）")
         st.warning(f"⏳ **回収期間が最も短い:** {best_payback['name']}（{best_payback['回収期間']}）")
 
-    # 通常の結果表示
+
+    # 結果表示
     st.markdown("### 📊 **全事業の分析結果**")
     for r in results:
-        #highlight = "🟢" if r == best_profit or r == best_payback else ""
         st.subheader(f"{r['name']} の結果")
         st.write(f"・市場スコア : {r['市場スコア']}")
         st.write(f"・初期投資額 : {r['初期投資額']}")
