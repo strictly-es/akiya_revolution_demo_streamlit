@@ -89,7 +89,7 @@ def get_PT0_values(x, y, z, lng_4, lat_4, api_key):
             if geometry.get("type") == "Polygon":
                 for coordinates in geometry.get("coordinates", []):
                     if is_point_in_polygon((lng_4, lat_4), coordinates):
-                        return properties.get("PT0_2020")
+                        return properties.get("PT00_2025")
     except requests.exceptions.RequestException:
         return None
 
@@ -141,6 +141,7 @@ class MarketPotentialCalculator:
     @classmethod
     def _normalize_factor(cls, area_type, factor_name, value):
         max_val = cls.FACTOR_RANGES[area_type].get(factor_name, 0)
+        
         if factor_name == "distance_from_station":
             return max(0.0, 1.0 - (value / max_val)) if value < max_val else 0.0
         return min(1.0, value / max_val)
@@ -193,8 +194,8 @@ st.title("AKIYA Revolution!")
 # ユーザー入力
 area = st.text_input("都道府県を入力", "神奈川県")
 addr = st.text_input("住所を入力", "鎌倉市由比ケ浜1-12-8")
-initial_investment = st.number_input("初期投資額 (円)", min_value=1_000_000, max_value=100_000_000, value=25_000_000, step=500_000)
-area_size = st.number_input("建物面積 (㎡)", min_value=50, max_value=10_000, value=2000, step=50)
+initial_investment = st.number_input("初期投資額 (円)", min_value=1_000_000, max_value=100_000_000, value=10_000_000, step=500_000)
+area_size = st.number_input("建物面積 (㎡)", min_value=50, max_value=10_000, value=100, step=50)
 
 # st.write(f"initial_investment: {initial_investment}")
 
