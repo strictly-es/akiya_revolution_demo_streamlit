@@ -96,11 +96,38 @@ def get_PT0_values(x, y, z, lng_4, lat_4, api_key):
 # ------------------------------
 # ⑥ 最寄り駅の距離を計算
 # ------------------------------
-def get_nearest_station_distance(longitude, latitude, path='station_zenkoku.gpkg'):
+def get_nearest_station_name(longitude, latitude, path= 'station_zenkoku.gpkg'):
+    # 全国の駅データを読み込む
     gdf = gpd.read_file(path).to_crs(epsg=3857)
+
+    # 指定座標の点を作成（WGS84 -> EPSG:3857 に変換）
     target_point = gpd.GeoDataFrame([{'geometry': Point(longitude, latitude)}], crs="EPSG:4326").to_crs(epsg=3857).geometry.iloc[0]
+
+    # 各駅との距離を計算
     gdf['distance'] = gdf.geometry.distance(target_point)
-    return gdf['distance'].min()
+
+    # 最短距離の駅を取得
+    min_distance = gdf['distance'].min()
+    nearest_stations = gdf[gdf['distance'] == min_distance]
+
+    # 同じ駅名で複数レコードがある場合をまとめる
+    result = nearest_stations.groupby('station_name').agg({
+        'station_g_cd': 'first',
+        'distance': 'first'
+    }).reset_index()
+    
+    if result.empty:
+        return None, None, None
+
+    station_g_cd_val = result["station_g_cd"].values[0]
+    station_name = result["station_name"].values[0]
+    distance = result["distance"].values[0]
+
+    # 該当する駅の路線情報を取得
+    line_info = gdf[gdf['station_g_cd'] == station_g_cd_val]["line_name"].dropna().unique().tolist()
+
+    return station_name, line_info, distance
+
 
 # ------------------------------
 # ⑦ 事業推薦・市場分析クラス
@@ -122,19 +149,46 @@ class MarketPotentialCalculator:
 
     WEIGHTS = {
         "kamakura": {
-            "cafe": {"population": 0.4, "distance_from_station": 0.2},
-            "accommodation": {"population": 0.2, "distance_from_station": 0.2},
-            "shareAtelier": {"population": 0.25, "distance_from_station": 0.25}
+            "cafe": {
+                "population": 0.3,
+                "distance_from_station": 0.7
+            },
+            "accommodation": {
+                "population": 0.5,
+                "distance_from_station": 0.5
+            },
+            "shareAtelier": {
+                "population": 0.4,
+                "distance_from_station": 0.6
+            }
         },
         "hayama": {
-            "cafe": {"population": 0.2, "distance_from_station": 0.2},
-            "accommodation": {"population": 0.4, "distance_from_station": 0.1},
-            "shareAtelier": {"population": 0.25, "distance_from_station": 0.25}
+             "cafe": {
+                "population": 0.4,
+                "distance_from_station": 0.6
+            },
+            "accommodation": {
+                "population": 0.5,
+                "distance_from_station": 0.5
+            },
+            "shareAtelier": {
+                "population": 0.4,
+                "distance_from_station": 0.6
+            }
         },
         "zushi": {
-            "cafe": {"population": 0.2, "distance_from_station": 0.2},
-            "accommodation": {"population": 0.4, "distance_from_station": 0.1},
-            "shareAtelier": {"population": 0.25, "distance_from_station": 0.25}
+             "cafe": {
+                "population": 0.4,
+                "distance_from_station": 0.6
+            },
+            "accommodation": {
+                "population": 0.5,
+                "distance_from_station": 0.5
+            },
+            "shareAtelier": {
+                "population": 0.4,
+                "distance_from_station": 0.6
+            }
         }
     }
 
@@ -194,7 +248,7 @@ st.title("AKIYA Revolution!")
 # ユーザー入力
 area = st.text_input("都道府県を入力", "神奈川県")
 addr = st.text_input("住所を入力", "鎌倉市由比ケ浜1-12-8")
-initial_investment = st.number_input("初期投資額 (円)", min_value=1_000_000, max_value=100_000_000, value=10_000_000, step=500_000)
+# initial_investment = st.number_input("初期投資額 (円)", min_value=1_000_000, max_value=100_000_000, value=10_000_000, step=500_000)
 area_size = st.number_input("建物面積 (㎡)", min_value=50, max_value=10_000, value=100, step=50)
 
 # st.write(f"initial_investment: {initial_investment}")
@@ -224,9 +278,12 @@ if st.button("事業を推薦"):
 
     # 5️⃣ 人口データ取得
     population = get_PT0_values(x, y, zoom, lng_4, lat_4, api_key)
+    st.write(f"人口データ: {population}")
 
     # 6️⃣ 最寄り駅の距離取得
-    distance = get_nearest_station_distance(lng_4, lat_4)
+    station_name, line_name, distance = get_nearest_station_name(lng_4, lat_4)
+    st.write(f"駅からの距離: {distance}")
+    st.write(f"最寄り駅: {station_name}")
 
     # 7️⃣ 事業推薦
     area_type = "kamakura" if "鎌倉" in addr else "hayama"
@@ -240,13 +297,12 @@ if st.button("事業を推薦"):
     )
 
     #入力値
-    #initial_investment=25_000_000
-    other_revenue=100_000
+    other_revenue=0
 
     businesses = {
     "cafe": Business(
         name="カフェ",
-        initial_investment=initial_investment,
+        initial_investment=10_000_000,
         users=2000,
         unit_price=1500,
         other_revenue=other_revenue,
@@ -264,7 +320,7 @@ if st.button("事業を推薦"):
     ),
     "accommodation": Business(
         name="宿泊施設",
-        initial_investment=initial_investment,
+        initial_investment=15_000_000,
         users=60,
         unit_price=75000,
         other_revenue=other_revenue,
@@ -282,7 +338,7 @@ if st.button("事業を推薦"):
     ),
     "shareAtelier": Business(
         name="シェアアトリエ",
-        initial_investment=initial_investment,
+        initial_investment=12_000_000,
         users=30,
         unit_price=75000,
         other_revenue=other_revenue,
@@ -300,7 +356,6 @@ if st.button("事業を推薦"):
     )
     }
 
-
     results = []
     for name in allowed_buildings:
         market_score = MarketPotentialCalculator.calculate(market_factors, name)
@@ -315,10 +370,10 @@ if st.button("事業を推薦"):
 
     # 収益率最大と回収期間最小が同じなら1つだけ表示
     if best_profit == best_payback:
-        st.success(f"🌟 **{best_profit['name']}** が最もおすすめです！")
+        st.success(f"🌟 **{best_profit['name']}** が最もおすすめです！ 収益率: {best_profit['収益率']}")
     else:
-        st.success(f"💰 **収益率が最も高い:** {best_profit['name']}（{best_profit['収益率']}）")
-        st.warning(f"⏳ **回収期間が最も短い:** {best_payback['name']}（{best_payback['回収期間']}）")
+        st.success(f"💰 **収益率が最も高い:** {best_profit['name']} 収益率: {best_profit['収益率']}")
+        #st.warning(f"⏳ **回収期間が最も短い:** {best_payback['name']}（{best_payback['回収期間']}）")
 
 
     # 結果表示
@@ -331,4 +386,4 @@ if st.button("事業を推薦"):
         st.write(f"・月間経費 : {r['月間経費']}")
         st.write(f"・月間利益 : {r['月間利益']}")
         st.write(f"・収益率 : {r['収益率']}")
-        st.write(f"・回収期間 : {r['回収期間']}")
+        #st.write(f"・回収期間 : {r['回収期間']}")
