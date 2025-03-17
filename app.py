@@ -325,9 +325,9 @@ if st.button("事業を推薦"):
         unit_price=60000,
         other_revenue=other_revenue,
         costs={
-            "人件費": 2_000_000,
+            "人件費": 200_000,
             "水道光熱費": 50_000,
-            "通信費": 6_000,
+            "通信費": 5_000,
             "清掃費": 50_000,
             "消耗品費": 700_000,
             "保険料": 2_000,
@@ -337,7 +337,7 @@ if st.button("事業を推薦"):
         },
     ),
     "shareAtelier": Business(
-        name="シェアアトリエ",
+        name="コワーキングスペース",
         initial_investment=12_000_000,
         users=15,
         unit_price=25000,
