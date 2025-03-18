@@ -300,60 +300,60 @@ if st.button("事業を推薦"):
     other_revenue=0
 
     businesses = {
-    "cafe": Business(
-        name="カフェ",
-        initial_investment=10_000_000,
-        users=200,
-        unit_price=1500,
-        other_revenue=other_revenue,
-        costs={
-            "人件費": 200_000,
-            "水道光熱費": 15_000,
-            "通信費": 15_000,
-            "清掃費": 10_000,
-            "消耗品費": 10_000,
-            "保険料": 10_000,
-            "修繕費": 0,
-            "地代家賃": 70_000,
-            "その他経費": 60_500
-        }
-    ),
-    "accommodation": Business(
-        name="宿泊施設",
-        initial_investment=15_000_000,
-        users=35,
-        unit_price=60000,
-        other_revenue=other_revenue,
-        costs={
-            "人件費": 200_000,
-            "水道光熱費": 50_000,
-            "通信費": 5_000,
-            "清掃費": 50_000,
-            "消耗品費": 700_000,
-            "保険料": 2_000,
-            "修繕費": 0,
-            "地代家賃": 350_000,
-            "その他経費": 192_000
-        },
-    ),
-    "shareAtelier": Business(
-        name="コワーキングスペース",
-        initial_investment=12_000_000,
-        users=15,
-        unit_price=25000,
-        other_revenue=other_revenue,
-        costs={
-            "人件費": 150_000,
-            "水道光熱費": 20_000,
-            "通信費": 7_000,
-            "清掃費": 10_000,
-            "消耗品費": 0,
-            "保険料": 15_000,
-            "修繕費": 0,
-            "地代家賃": 30_000,
-            "その他経費": 50_000
-        }
-    )
+        "cafe": Business(
+            name="カフェ",
+            initial_investment=10_000_000,
+            users=320,
+            unit_price=1500,
+            other_revenue=other_revenue,
+            costs={
+                "人件費": 200_000,
+                "水道光熱費":15_000,
+                "通信費": 10_000,
+                "清掃費": 10_000,
+                "消耗品費": 10_000,
+                "保険料": 10_000,
+                "修繕費": 0,
+                "地代家賃": 70_000,
+                "その他経費": 20_000
+            }
+        ),
+        "accommodation": Business(
+            name="宿泊施設",
+            initial_investment=15_000_000,
+            users=35,
+            unit_price=60000,
+            other_revenue=other_revenue,
+            costs={
+                "人件費": 200_000,
+                "水道光熱費": 50_000,
+                "通信費": 5_000,
+                "清掃費": 50_000,
+                "消耗品費": 700_000,
+                "保険料": 2_000,
+                "修繕費": 0,
+                "地代家賃": 350_000,
+                "その他経費": 192_000
+            },
+        ),
+        "shareAtelier": Business(
+            name="コワーキングスペース",
+            initial_investment=12_000_000,
+            users=15,
+            unit_price=25000,
+            other_revenue=other_revenue,
+            costs={
+                "人件費": 150_000,
+                "水道光熱費": 20_000,
+                "通信費": 7_000,
+                "清掃費": 10_000,
+                "消耗品費": 0,
+                "保険料": 10_000,
+                "修繕費": 0,
+                "地代家賃": 30_000,
+                "その他経費": 40_000
+            }
+        )
     }
 
     results = []
