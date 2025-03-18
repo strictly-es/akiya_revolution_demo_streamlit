@@ -343,7 +343,7 @@ if st.button("事業を推薦"):
         unit_price=25000,
         other_revenue=other_revenue,
         costs={
-            "人件費": 60_000,
+            "人件費": 150_000,
             "水道光熱費": 20_000,
             "通信費": 7_000,
             "清掃費": 10_000,
